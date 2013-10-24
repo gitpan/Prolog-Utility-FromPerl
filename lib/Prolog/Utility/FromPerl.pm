@@ -138,7 +138,17 @@ sub prolog_hash {
         %hash = @_;
   }
 
-  return join(',',map { prolog_term($_,$hash{$_}); } keys %hash);
+  my $sort = delete $hash{_SORT};
+
+  if(defined($sort) && ref($sort) eq 'ARRAY') {
+
+    return join(',',map { prolog_term($_,$hash{$_}); } grep { exists($hash{$_}) } @$sort);
+
+  } else {
+
+    return join(',',map { prolog_term($_,$hash{$_}); } sort keys %hash);
+
+  }
 
 }
 
@@ -254,7 +264,7 @@ L<http://rt.cpan.org>.
 
 =head1 AUTHOR
 
-Tyson Maly  C<< <mail@tysonmaly.com> >>
+Tyson Maly  C<< <tvmaly@cpan.org> >>
 
 
 =head1 LICENCE AND COPYRIGHT

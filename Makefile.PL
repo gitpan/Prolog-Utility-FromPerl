@@ -4,7 +4,7 @@ use ExtUtils::MakeMaker;
 
 WriteMakefile(
     NAME                => 'Prolog::Utility::FromPerl',
-    AUTHOR              => 'Tyson Maly <mail@tysonmaly.com>',
+    AUTHOR              => 'Tyson Maly <tvmaly@cpan.org>',
     VERSION_FROM        => 'lib/Prolog/Utility/FromPerl.pm',
     ABSTRACT_FROM       => 'lib/Prolog/Utility/FromPerl.pm',
     PL_FILES            => {},
