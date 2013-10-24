@@ -5,13 +5,13 @@ use strict;
 
 use version; 
 
-our $VERSION = qv('1.0.0');
+our $VERSION = qv('1.0.2');
 
 use Regexp::Common qw(balanced);
 
 use base qw(Exporter);
 
-our @EXPORT = qw(printable_prolog prolog_term prolog_hash prolog_list);
+our @EXPORT = qw(printable_prolog chain_terms prolog_term prolog_hash prolog_list);
 
 
 sub printable_prolog {
@@ -20,16 +20,39 @@ sub printable_prolog {
 
  return $prolog if !defined($prolog);
 
- $prolog .= '.' if $prolog !~ /\.$/;
+ if(ref($prolog) eq 'SCALAR') {
+
+    ${$prolog} .= '.' if ${$prolog} !~ /\.$/;
+     
+ } elsif(ref(\$prolog) eq 'SCALAR') {
+    $prolog .= '.' if $prolog !~ /\.$/;
+ } 
 
  return $prolog;
+
+}
+
+sub chain_terms {
+  
+  my @terms = ();
+
+  if(scalar(@_) == 1 && ref($_[0]) eq 'ARRAY') {
+
+    @terms = @{$_[0]};
+
+  } else {
+    
+    @terms = @_;
+
+  }
+
+  return printable_prolog( join(',',map { s/\.$//g; $_; } grep { defined($_) } @terms ) );
 
 }
 
 sub prolog_term {
 
   my @nested = caller(1);
-
 
   my $term = shift;
 
@@ -38,20 +61,29 @@ sub prolog_term {
   foreach my $value (@_) {
 
     if(ref($value)) {
+
         $prolog .= convert_ref_to_prolog($value);
+
     } else {
+
         if(ref(\$value) ne 'SCALAR') {
+
             $prolog .= convert_ref_to_prolog(\$value);
+
         } else {
+
             $prolog .= quote_prolog_value($value) . ',';
+
         }
+
     }
 
   }
 
-  if(scalar(@nested) > 0) {
+  if( scalar(@nested) > 0 ) {
 
     $prolog =~ s/,$//g;
+
     return $prolog . ')';
 
  } else {
@@ -73,19 +105,25 @@ sub add_prolog_term_end {
 
   my @parts = ($partial_prolog_string =~ /$PATTERN/g);
 
-  if(scalar(@parts) > 1) {
+  if( scalar(@parts) > 1 ) {
+
     $partial_prolog_string .= ')';
+
   } elsif(scalar(@parts) == 1 && length($partial_prolog_string) < length($parts[1])) {
+
     $partial_prolog_string .= ')';
+
   } else {
+
     if($partial_prolog_string =~ /\(/ && $partial_prolog_string !~ /\)/) {
+
         $partial_prolog_string =~ s/,$//g;
+
         $partial_prolog_string .= ')';
+
     }
+
   }
-
-  
-
 
   return $partial_prolog_string;
 
@@ -104,9 +142,13 @@ sub convert_ref_to_prolog {
     return prolog_hash($ref);
 
   } elsif(ref($ref) eq 'SCALAR') {
+
     return quote_prolog_value(${$ref});
+
   } else {
+
     die(ref($ref) . ' unsuppored reference' . "\n");
+
   }
 
 }
@@ -120,11 +162,12 @@ sub prolog_list {
     @list = @{$_[0]};
 
  } else {
+
     @list = @_;
+
  }
 
  return '[' . join(',',map { if(defined($_)) { quote_prolog_value($_); } else { "'nil'"; } } @list) . ']';
-  
 
 }
 
@@ -133,9 +176,13 @@ sub prolog_hash {
   my %hash;
 
   if(ref($_[0])) {
+
         %hash = %{$_[0]};
+
   } else {
+
         %hash = @_;
+
   }
 
   my $sort = delete $hash{_SORT};
@@ -158,6 +205,12 @@ sub quote_prolog_value {
 
   return $value if $value =~ /\(/;
 
+  return $value if $value =~ /^[a-z]+[a-z0-9]+$/;
+
+  return $value if $value =~ /^\d+(\.\d+)?$/;
+
+  return $value if $value eq '[]';
+
   return "'" . $value . "'";
 
 }
@@ -173,7 +226,7 @@ Prolog::Utility::FromPerl - utility function to convert perl data structures to 
 
 =head1 VERSION
 
-This document describes Prolog::Utility::FromPerl version 1.0.0
+This document describes Prolog::Utility::FromPerl version 1.0.2
 
 
 =head1 SYNOPSIS
@@ -184,11 +237,21 @@ This document describes Prolog::Utility::FromPerl version 1.0.0
 
     my $t = prolog_term('wtf',$h);
 
-    say $t;
+    say $t; # wtf(bar(2,3), baz(a(123)), foo(1))  
+
+    my $sort_hash = { abc => 1, xyz => 2, '_SORT' => ['xyz','abc'] };
+
+    my $sorted_term = prolog_term('somefact',$sort_hash);
+
+    say $sorted_term; # somefact(xyz(2),abc(1))
 
     my $functor=prolog_term('foo',1,2,3,'bar');
 
-    say $functor;
+    say $functor; # foo(1,2,3,'bar')
+
+    my $chained_term = chain_terms(prolog_term('foo',1),prolog_term('bar',2));
+
+    say $chained_term; # foo(1),bar(2).
 
     my $type=prolog_term('type','bigserial');
 
@@ -221,9 +284,11 @@ This document describes Prolog::Utility::FromPerl version 1.0.0
 
 =item prolog_term given a name, and a data structure, return a prolog term
 
-=item printable_prolog prepare a prolog term for printing
+=item printable_prolog prepare a prolog term for printing by appending a period at the end of the term.
 
-=item prolog_hash given a hash or hash reference, convert each key value pair to a prolog term
+=item chain_terms given an array or array reference of terms, join them by commas and append a final period to them.
+
+=item prolog_hash given a hash or hash reference, convert each key value pair to a prolog term. The keys will be sorted by the sort function in order to maintain a consistent order due to hash randomization in perl 5.18.  If you provide a key named _SORT with a value that is an array reference containing the other keys in the order you wish them to appear, they will be sorted by this order. The _SORT key itself will not appear in the output.
 
 =item prolog_list given an array or array reference, convert to a prolog list
 
